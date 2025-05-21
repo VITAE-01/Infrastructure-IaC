@@ -1,0 +1,40 @@
+#cloud-config
+# This cloud-config file is used to initialize a new droplet with the necessary configurations.
+
+package_update: true
+packages:
+  - python3
+  - python3-pip
+  - docker.io
+  - docker-compose
+  - openjdk-21-jdk
+  - ansible
+  - nodejs
+  - npm
+  - maven
+
+users:
+  - name: ${username}
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${ssh_pub_key}
+    home: /home/${username}
+    create_home: true
+
+write_files:
+  - path: /etc/sudoers.d/${username}
+    content: |
+      ${username} ALL=(ALL) NOPASSWD: ALL
+    owner: root:root
+    permissions: '0440'
+
+runcmd:
+  - curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+  - echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
+  - apt update
+  - apt install -y terraform
+  - sudo usermod -aG docker ${username}
+  - sudo chmod +x /usr/local/bin/docker-compose
+  - sudo systemctl enable docker
+  - sudo systemctl start docker
+
