@@ -75,22 +75,23 @@ pipeline {
             when {
                 branch 'PR-*'
             }
-
-            script {
-                    def terraformDirs = ['Terraform-AWS/GLOBAL/S3']
-                    def parallelSteps = terraformDirs.collectEntries { dirName ->
-                        ["Validate ${dirName}": {
-                            dir("Infrastructure-IaC/${dirName}") {
-                                echo "Validating Terraform for ${repoName}/${dirName} resources."
-                                withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AWS_CREDENTIALS', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'),
-                                                file(credentialsId: "terraform${dirName.toLowerCase()}.tfvars", variable: 'AWS_TF_VARS')]) {
-                                                    sh 'cp ${AWS_TF_VARS} terraform-validate.tfvars'
-                                                    sh "terraform validate"
+            steps {
+                script {
+                        def terraformDirs = ['Terraform-AWS/GLOBAL/S3']
+                        def parallelSteps = terraformDirs.collectEntries { dirName ->
+                            ["Validate ${dirName}": {
+                                dir("Infrastructure-IaC/${dirName}") {
+                                    echo "Validating Terraform for ${repoName}/${dirName} resources."
+                                    withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AWS_CREDENTIALS', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'),
+                                                    file(credentialsId: "terraform${dirName.toLowerCase()}.tfvars", variable: 'AWS_TF_VARS')]) {
+                                                        sh 'cp ${AWS_TF_VARS} terraform-validate.tfvars'
+                                                        sh "terraform validate"
+                                    }
                                 }
-                            }
-                        }]
-                    }
-                    parallel parallelSteps
+                            }]
+                        }
+                        parallel parallelSteps
+                }
             }
         }
 
