@@ -55,10 +55,10 @@ pipeline {
 
             steps {
                 script {
-                    def terraformDirs = ['Terraform-AWS/GLOBAL/S3']
+                    def terraformDirs = ['S3']
                     def parallelSteps = terraformDirs.collectEntries { dirName ->
                         ["Initialize ${dirName}": {
-                            dir("Infrastructure-IaC/${dirName}") {
+                            dir("Infrastructure-IaC/Terraform-AWS/GLOBAL/${dirName}") {
                                 echo "Initializing Terraform for ${repoName}/${dirName} resources."
                                 withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AWS_CREDENTIALS', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
                                     sh 'terraform init --backend-config=../../backend.hcl'
@@ -77,13 +77,13 @@ pipeline {
             }
             steps {
                 script {
-                        def terraformDirs = ['Terraform-AWS/GLOBAL/S3']
+                        def terraformDirs = ['S3']
                         def parallelSteps = terraformDirs.collectEntries { dirName ->
                             ["Validate ${dirName}": {
-                                dir("Infrastructure-IaC/${dirName}") {
+                                dir("Infrastructure-IaC/Terraform-AWS/GLOBAL/${dirName}") {
                                     echo "Validating Terraform for ${repoName}/${dirName} resources."
                                     withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AWS_CREDENTIALS', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'),
-                                                    file(credentialsId: "terraform${dirName.toLowerCase()}.tfvars", variable: 'AWS_TF_VARS')]) {
+                                                    file(credentialsId: "${dirName.toLowerCase()}.tfvars", variable: 'AWS_TF_VARS')]) {
                                                         sh 'cp ${AWS_TF_VARS} terraform-validate.tfvars'
                                                         sh "terraform validate"
                                     }
@@ -102,13 +102,13 @@ pipeline {
 
             steps {
                 script {
-                    def terraformDirs = ['Terraform-AWS/GLOBAL/S3']
+                    def terraformDirs = ['S3']
                     def parallelSteps = terraformDirs.collectEntries { dirName ->
                         ["Plan ${dirName}": {
-                            dir("Infrastructure-IaC/${dirName}") {
+                            dir("Infrastructure-IaC/Terraform-AWS/GLOBAL/${dirName}") {
                                 echo "Creating Terraform plan for ${repoName}/${dirName} resources."
                                 withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AWS_CREDENTIALS', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'),
-                                                file(credentialsId: "terraform${dirName.toLowerCase()}.tfvars", variable: 'AWS_TF_VARS')]) {
+                                                file(credentialsId: "${dirName.toLowerCase()}.tfvars", variable: 'AWS_TF_VARS')]) {
                                                     sh 'cp ${AWS_TF_VARS} terraform-plan.tfvars'
                                                     sh 'terraform plan -var-file=terraform-plan.tfvars'
                                 }
@@ -139,13 +139,13 @@ pipeline {
             }
             steps {
                 script {
-                    def terraformDirs = ['Terraform-AWS/GLOBAL/S3']
+                    def terraformDirs = ['S3']
                     def parallelSteps = terraformDirs.collectEntries { dirName ->
                         ["Plan ${dirName}": {
-                            dir("Infrastructure-IaC/${dirName}") {
+                            dir("Infrastructure-IaC/Terraform-AWS/GLOBAL/${dirName}") {
                                 echo "Applying Terraform for ${repoName}/${dirName} resources."
                                 withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AWS_CREDENTIALS', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'),
-                                                file(credentialsId: "terraform${dirName.toLowerCase()}.tfvars", variable: 'AWS_TF_VARS')]) {
+                                                file(credentialsId: "${dirName.toLowerCase()}.tfvars", variable: 'AWS_TF_VARS')]) {
                                                     sh 'cp ${AWS_TF_VARS} terraform-apply.tfvars'
                                                     sh 'terraform apply -var-file=terraform-apply.tfvars -auto-approve'
                                 }
