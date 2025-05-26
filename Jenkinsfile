@@ -35,7 +35,7 @@ pipeline {
             }
             steps {
                 script {
-                    echo "Checking out the source code from the repository: ${repoName} - branch: ${branchName}"
+                    echo "Checking out source code from repository: ${repoName} - branch: ${branchName}"
                     dir('Infrastructure-IaC') {
                         checkout scm
                     }
