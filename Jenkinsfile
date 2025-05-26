@@ -1,0 +1,183 @@
+def repoName = ''
+def branchName = ''
+
+pipeline {
+    agent any
+
+    environment {
+        TERRAFORM_VERSION= tool 'terraform'
+    }
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+    }
+
+    stages {
+
+        stage('Initialize variables') {
+            steps {
+                script {
+                    repoName = env.GIT_URL?.tokenize('/').last()?.replace('.git', '')
+                    branchName = env.GIT_BRANCH?.replaceFirst(/^origin\//, '')
+                }
+            }
+        }
+
+        stage('Checkout Repositories') {
+            when {
+                anyOf {
+                    branch 'PR-*'
+                    expression {
+                        return branchName == 'Dev'
+                    }
+                }
+            }
+            steps {
+                script {
+                    echo "Checking out the source code from the repository: ${repoName} - branch: ${branchName}"
+                    dir('Infrastructure-IaC') {
+                        checkout scm
+                    }
+                }
+            }
+        }
+
+        stage('Initialize Terraform') {
+            when {
+                anyOf {
+                    branch 'PR-*'
+                    expression {
+                        return branchName == 'Dev'
+                    }
+                }
+            }
+
+            steps {
+                script {
+                    def terraformDirs = ['Terraform-AWS/GLOBAL/S3']
+                    def parallelSteps = terraformDirs.collectEntries { dirName ->
+                        ["Initialize ${dirName}": {
+                            dir("Infrastructure-IaC/${dirName}") {
+                                echo "Initializing Terraform for ${repoName}/${dirName} resources."
+                                withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AWS_CREDENTIALS', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                                    sh 'terraform init --backend-config=../../backend.hcl'
+                                }
+                            }
+                        }]
+                    }
+                    parallel parallelSteps
+                }
+            }
+        }
+
+        stage('Terraform Validate') {
+            when {
+                branch 'PR-*'
+            }
+
+            script {
+                    def terraformDirs = ['Terraform-AWS/GLOBAL/S3']
+                    def parallelSteps = terraformDirs.collectEntries { dirName ->
+                        ["Validate ${dirName}": {
+                            dir("Infrastructure-IaC/${dirName}") {
+                                echo "Validating Terraform for ${repoName}/${dirName} resources."
+                                withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AWS_CREDENTIALS', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'),
+                                                file(credentialsId: "terraform${dirName.toLowerCase()}.tfvars", variable: 'AWS_TF_VARS')]) {
+                                                    sh 'cp ${AWS_TF_VARS} terraform-validate.tfvars'
+                                                    sh "terraform validate"
+                                }
+                            }
+                        }]
+                    }
+                    parallel parallelSteps
+            }
+        }
+
+        stage('Terraform Plan') {
+            when {
+                branch 'PR-*'
+            }
+
+            steps {
+                script {
+                    def terraformDirs = ['Terraform-AWS/GLOBAL/S3']
+                    def parallelSteps = terraformDirs.collectEntries { dirName ->
+                        ["Plan ${dirName}": {
+                            dir("Infrastructure-IaC/${dirName}") {
+                                echo "Creating Terraform plan for ${repoName}/${dirName} resources."
+                                withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AWS_CREDENTIALS', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'),
+                                                file(credentialsId: "terraform${dirName.toLowerCase()}.tfvars", variable: 'AWS_TF_VARS')]) {
+                                                    sh 'cp ${AWS_TF_VARS} terraform-plan.tfvars'
+                                                    sh 'terraform plan -var-file=terraform-plan.tfvars'
+                                }
+                            }
+                        }]
+                    }
+                    parallel parallelSteps
+                }
+            }
+        }
+
+        stage('Terraform Plan Approval') {
+            when {
+                expression {
+                    return branchName == 'Dev'
+                }
+            }
+            steps {
+                input message: 'Approve Terraform Plan?'
+            }
+        }
+
+        stage('Terraform Apply') {
+            when {
+                expression {
+                    return branchName == 'Dev'
+                }
+            }
+            steps {
+                script {
+                    def terraformDirs = ['Terraform-AWS/GLOBAL/S3']
+                    def parallelSteps = terraformDirs.collectEntries { dirName ->
+                        ["Plan ${dirName}": {
+                            dir("Infrastructure-IaC/${dirName}") {
+                                echo "Applying Terraform for ${repoName}/${dirName} resources."
+                                withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AWS_CREDENTIALS', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'),
+                                                file(credentialsId: "terraform${dirName.toLowerCase()}.tfvars", variable: 'AWS_TF_VARS')]) {
+                                                    sh 'cp ${AWS_TF_VARS} terraform-apply.tfvars'
+                                                    sh 'terraform apply -var-file=terraform-apply.tfvars -auto-approve'
+                                }
+                            }
+                        }]
+                    }
+                    parallel parallelSteps
+                }
+            }
+        }
+    }
+
+    post {
+
+        success {
+            script {
+                echo "Infrastructure successfully created for ${repoName} repository."
+                cleanWs()
+            }
+        }
+
+        failure {
+            script {
+                echo "Infrastructure failed for ${repoName} repository."
+                cleanWs()
+            }
+        }
+
+        aborted {
+            script {
+                echo "Infrastructure was aborted for ${repoName} repository."
+                cleanWs()
+            }
+        }
+    }
+}
